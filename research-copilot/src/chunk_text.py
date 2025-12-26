@@ -1,5 +1,5 @@
 from typing import List, Dict
-from config import CHUNK_SIZE, CHUNK_OVERLAP
+from src.config import CHUNK_SIZE, CHUNK_OVERLAP
 
 
 def chunk_pages(pages: List[Dict], chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP):

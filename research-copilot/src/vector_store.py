@@ -5,7 +5,7 @@ from typing import List, Dict
 import chromadb
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
-from config import CHROMA_DIR, CHROMA_COLLECTION, EMBEDDING_MODEL
+from src.config import CHROMA_DIR, CHROMA_COLLECTION, EMBEDDING_MODEL
 
 
 def make_id(source: str, page: int, start: int, end: int, text: str) -> str:

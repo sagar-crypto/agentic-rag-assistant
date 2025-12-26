@@ -5,7 +5,7 @@ from typing import List, Dict
 import re
 import requests
 
-from config import LLM_MODEL
+from src.config import LLM_MODEL
 
 
 _CITATION_RE = re.compile(r"\[(\d+)\]")

@@ -20,3 +20,8 @@ CHROMA_COLLECTION = "papers"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 LLM_MODEL = "llama3.1"
 TOP_K = 5
+
+UPLOADS_DIR = DATA_DIR / "uploads"
+
+API_HOST = "127.0.0.1"
+API_PORT = 8000
