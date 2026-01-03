@@ -3,14 +3,15 @@ from __future__ import annotations
 
 import hashlib
 from fastapi import FastAPI, UploadFile, File, HTTPException
-
+import json
+from collections import Counter
+from fastapi.responses import StreamingResponse
+from src.vector_store import reset_collection
 from src.config import UPLOADS_DIR, TOP_K
-from src.ingest import pdf_to_chunks
 from src.vector_store import get_collection, add_chunks, query
-from src.qa_ollama import answer as grounded_answer
-from src.api.schemas import AskRequest, AskResponse, SourceItem
+from src.qa_ollama import answer as grounded_answer, answer_stream
 from src.ingest import pdf_to_chunks, text_to_chunks
-from src.api.schemas import AskRequest, AskResponse, SourceItem, IngestTextRequest, IngestTextResponse
+from src.api.schemas import AskRequest, AskResponse, IngestTextRequest, IngestTextResponse
 
 
 app = FastAPI(title="Research Copilot API", version="0.3.0")
@@ -78,20 +79,21 @@ def ask(req: AskRequest):
         return AskResponse(answer="INSUFFICIENT_EVIDENCE: No relevant chunks retrieved.", sources=[])
 
     # Call Ollama with strict citations
-    ans = grounded_answer(q, hits)
+    history = [m.model_dump() for m in (req.chat_history or [])]
+    ans = grounded_answer(q, hits, chat_history=history)
 
     # Return sources for UI
     sources = []
     for h in hits:
-        meta = h["meta"]
-        txt = h["text"]
+        meta = h["meta"] or {}
+        txt = h["text"] or ""
         sources.append(
-            SourceItem(
-                source=str(meta.get("source", "unknown")),
-                page=int(meta.get("page", 0) or 0),
-                distance=float(h["distance"]),
-                chunk_preview=(txt[:240] + ("..." if len(txt) > 240 else "")),
-            )
+            {
+                "source": str(meta.get("source", "unknown")),
+                "page": int(meta.get("page", 0) or 0),
+                "distance": float(h.get("distance", 0.0)),
+                "chunk_preview": (txt[:240] + ("..." if len(txt) > 240 else "")),
+            }
         )
 
     return AskResponse(answer=ans, sources=sources)
@@ -121,3 +123,88 @@ def ingest_text(req: IngestTextRequest):
         source_name=source_name,
         chunks_added=n_added,
     )
+
+
+
+
+@app.post("/ask/stream")
+def ask_stream(req: AskRequest):
+    q = (req.question or "").strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+    k = req.top_k if req.top_k is not None else TOP_K
+    k = max(1, min(int(k), 20))
+
+    _, collection = get_collection()
+    hits = query(collection, q, k=k)
+
+    # Build sources payload once (same as /ask, plus optional chunk_id/start/end)
+    sources_payload = []
+    for h in hits:
+        meta = h.get("meta") or {}
+        txt = h.get("text") or ""
+        sources_payload.append(
+            {
+                "source": str(meta.get("source", "unknown")),
+                "page": int(meta.get("page", 0) or 0),
+                "distance": float(h.get("distance", 0.0)),
+                "chunk_id": h.get("id"),
+                "start": meta.get("start"),
+                "end": meta.get("end"),
+                "chunk_preview": (txt[:240] + ("..." if len(txt) > 240 else "")),
+            }
+        )
+
+    def gen():
+        if not hits:
+            yield json.dumps({"type": "token", "data": "INSUFFICIENT_EVIDENCE: No relevant chunks retrieved."}) + "\n"
+            yield json.dumps({"type": "sources", "data": []}) + "\n"
+            yield json.dumps({"type": "done"}) + "\n"
+            return
+
+        # stream tokens
+        history = [m.model_dump() for m in (req.chat_history or [])]
+        for tok in answer_stream(q, hits, chat_history=history):
+            yield json.dumps({"type": "token", "data": tok}) + "\n"
+
+        # send sources at end
+        yield json.dumps({"type": "sources", "data": sources_payload}) + "\n"
+        yield json.dumps({"type": "done"}) + "\n"
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+
+@app.get("/documents")
+def list_documents():
+    _, collection = get_collection()
+
+    # Get all metadatas (may be large; okay for now)
+    data = collection.get(include=["metadatas"])
+    metas = data.get("metadatas", []) or []
+
+    sources = [m.get("source", "unknown") for m in metas if isinstance(m, dict)]
+    counts = Counter(sources)
+
+    docs = [{"source": s, "chunks": int(c)} for s, c in sorted(counts.items())]
+    return {"documents": docs, "total_sources": len(docs)}
+
+
+@app.delete("/documents/{source_name}")
+def delete_document(source_name: str):
+    source_name = (source_name or "").strip()
+    if not source_name:
+        raise HTTPException(status_code=400, detail="source_name cannot be empty")
+
+    _, collection = get_collection()
+
+    # Chroma supports where filters on metadata
+    collection.delete(where={"source": source_name})
+
+    return {"message": "deleted", "source": source_name}
+
+
+@app.post("/documents/reset")
+def reset_documents():
+    reset_collection()
+    return {"message": "reset_done"}

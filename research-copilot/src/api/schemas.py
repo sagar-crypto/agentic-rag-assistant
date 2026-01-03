@@ -1,12 +1,13 @@
 # src/api/schemas.py
 from __future__ import annotations
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pydantic import BaseModel
 
 
 class AskRequest(BaseModel):
     question: str
-    top_k: Optional[int] = None  # default will be used if None
+    top_k: int | None = None
+    chat_history: List[ChatMessage] = [] 
 
 
 class SourceItem(BaseModel):
@@ -31,3 +32,19 @@ class IngestTextResponse(BaseModel):
     doc_id: str
     source_name: str
     chunks_added: int
+
+
+
+class SourceItem(BaseModel):
+    source: str
+    page: int
+    distance: float
+    chunk_id: Optional[str] = None
+    start: Optional[int] = None
+    end: Optional[int] = None
+    chunk_preview: str
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str

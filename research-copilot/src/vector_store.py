@@ -66,8 +66,9 @@ def query(collection, question: str, k: int = 5):
     docs = res["documents"][0]
     metas = res["metadatas"][0]
     dists = res["distances"][0]
+    ids = res.get("ids", [[]])[0]
 
-    for doc, meta, dist in zip(docs, metas, dists):
-        hits.append({"text": doc, "meta": meta, "distance": dist})
+    for doc, meta, dist, _id in zip(docs, metas, dists, ids):
+        hits.append({"id": _id, "text": doc, "meta": meta, "distance": dist})
 
     return hits
