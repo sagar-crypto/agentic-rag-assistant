@@ -92,6 +92,9 @@ def ask(req: AskRequest):
                 "source": str(meta.get("source", "unknown")),
                 "page": int(meta.get("page", 0) or 0),
                 "distance": float(h.get("distance", 0.0)),
+                "chunk_id": h.get("id"),
+                "start": meta.get("start"),
+                "end": meta.get("end"),
                 "chunk_preview": (txt[:240] + ("..." if len(txt) > 240 else "")),
             }
         )

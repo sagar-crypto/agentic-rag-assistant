@@ -27,10 +27,8 @@ def build_prompt(question: str, hits: List[Dict], chat_history: List[Dict] | Non
         content = (m.get("content") or "").strip()
         if not content:
             continue
-        if role == "assistant":
-            history_blocks.append(f"ASSISTANT: {content}")  
-        else:
-            history_blocks.append(f"USER: {content}")
+        prefix = "ASSISTANT" if role == "assistant" else "USER"
+        history_blocks.append(f"{prefix}: {content}")
 
     history = "\n".join(history_blocks) if history_blocks else "None"
     evidence_blocks = []
@@ -82,6 +80,7 @@ def build_prompt(question: str, hits: List[Dict], chat_history: List[Dict] | Non
     - <1 bullet quoting/paraphrasing the most relevant evidence> [#]
     - <optional 2nd bullet> [#]
     """
+
 
 
 def ollama_generate(prompt: str, model: str = LLM_MODEL) -> str:
